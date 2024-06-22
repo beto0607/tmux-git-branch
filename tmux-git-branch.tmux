@@ -1,55 +1,35 @@
 #!/bin/bash
 
-PATH="/usr/local/bin:$PATH:/usr/sbin"
-
-get_tmux_option() {
-  local option_name="$1"
-  local default_value="$2"
-  local option_value="$(tmux show-option -gqv $option_name)"
-
-  if [ -z "$option_value" ]; then
-    echo -n "$default_value"
-  else
-    echo -n "$option_value"
-  fi
-}
-
-set_tmux_option() {
-  local option_name="$1"
-  local option_value="$2"
-  $(tmux set-option -gq $option_name "$option_value")
-}
-
-
 CURRENT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source "$CURRENT_DIR/scripts/helpers.sh"
 
-replace_placeholder_in_status_line() {
-    local placeholder="\#{$1}"
-    local script="#($2)"
-    local status_line_side=$3
-    local old_status_line=$(get_tmux_option $status_line_side)
-    local new_status_line=${old_status_line/$placeholder/$script}
+git_interpolation=(
+  "\#{git_branch}"
+)
+git_commands=(
+  "#($CURRENT_DIR/scripts/git_branch.sh)"
+)
 
-    $(set_tmux_option $status_line_side "$new_status_line")
+do_interpolation() {
+  local all_interpolated="$1"
+  for ((i = 0; i < ${#git_commands[@]}; i++)); do
+    all_interpolated=${all_interpolated//${git_interpolation[$i]}/${git_commands[$i]}}
+  done
+  echo "$all_interpolated"
 }
 
-main(){
-    local value="$(git rev-parse --abbrev-ref "HEAD")"
-    replace_placeholder_in_status_line "git_branch" "$value" "status-right"
+update_tmux_option() {
+  local option
+  local option_value
+  local new_option_value
+  option=$1
+  option_value=$(get_tmux_option "$option")
+  new_option_value=$(do_interpolation "$option_value")
+  set_tmux_option "$option" "$new_option_value"
 }
-# local update_interval=10; #$((60 * $(get_tmux_option "@tmux-weather-interval" 15)))
-# local current_time=$(date "+%s")
-# local previous_update=$(get_tmux_option "@git-branch-previous-update-time")
-# local delta=$((current_time - previous_update))
-#
-# if [ -z "$previous_update" ] || [ $delta -ge $update_interval ]; then
-#   local value=$(git rev-parse --abbrev-ref "HEAD")
-#   if [ "$?" -eq 0 ]; then
-#     $(set_tmux_option "@git-branch-previous-update-time" "$current_time")
-#     $(set_tmux_option "@git-branch-previous-value" "$value")
-#   fi
-# fi
-#
-# echo -n $(get_tmux_option "@git-branch-previous-value")
 
+main() {
+    update_tmux_option "status-right"
+    update_tmux_option "status-left"
+}
 main
